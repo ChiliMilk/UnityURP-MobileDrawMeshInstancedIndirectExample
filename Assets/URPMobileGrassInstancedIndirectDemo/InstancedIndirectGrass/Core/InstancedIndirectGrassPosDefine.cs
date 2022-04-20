@@ -1,5 +1,6 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
+using Unity.Mathematics;
 using UnityEngine;
 
 [ExecuteAlways]
@@ -8,14 +9,14 @@ public class InstancedIndirectGrassPosDefine : MonoBehaviour
     [Range(1, 40000000)]
     public int instanceCount = 1000000;
     public float drawDistance = 125;
-
-    private int cacheCount = -1;
+    private float cellSize = 5;
 
     // Start is called before the first frame update
     void Start()
     {
         UpdatePosIfNeeded();
     }
+
     private void Update()
     {
         UpdatePosIfNeeded();
@@ -31,7 +32,7 @@ public class InstancedIndirectGrassPosDefine : MonoBehaviour
     }
     private void UpdatePosIfNeeded()
     {
-        if (instanceCount == cacheCount)
+        if (InstancedIndirectGrassRenderer.instance.allGrassPos.IsCreated)
             return;
 
         Debug.Log("UpdatePos (Slow)");
@@ -40,29 +41,39 @@ public class InstancedIndirectGrassPosDefine : MonoBehaviour
         UnityEngine.Random.InitState(123);
 
         //auto keep density the same
-        float scale = Mathf.Sqrt((instanceCount / 4)) / 2f;
+        float scale = Mathf.Sqrt(instanceCount / 4);
         transform.localScale = new Vector3(scale, transform.localScale.y, scale);
 
-        //////////////////////////////////////////////////////////////////////////
-        //can define any posWS in this section, random is just an example
-        //////////////////////////////////////////////////////////////////////////
-        List<Vector3> positions = new List<Vector3>(instanceCount);
-        for (int i = 0; i < instanceCount; i++)
+        int cellCountX = (int)(transform.lossyScale.x / cellSize);
+        int cellCountZ = (int)(transform.lossyScale.z / cellSize);
+        int cellCount = cellCountX * cellCountZ;
+        int cellGrassCount = instanceCount / cellCount;
+
+        cellSize = InstancedIndirectGrassRenderer.instance.cellSize;
+        InstancedIndirectGrassRenderer.instance.cellCountX = cellCountX;
+        InstancedIndirectGrassRenderer.instance.cellCountZ = cellCountZ;
+        InstancedIndirectGrassRenderer.instance.cellGrassCount = cellGrassCount;
+        InstancedIndirectGrassRenderer.instance.allGrassPos = new Unity.Collections.NativeArray<float3>(instanceCount, Unity.Collections.Allocator.Persistent);
+
+        Vector3 centerOffset = new Vector3(transform.lossyScale.x * 0.5f, 0f, transform.lossyScale.z * 0.5f);
+        int index = 0;
+        for (int i = 0; i < cellCountX; i++)
         {
-            Vector3 pos = Vector3.zero;
-
-            pos.x = UnityEngine.Random.Range(-1f, 1f) * transform.lossyScale.x;
-            pos.z = UnityEngine.Random.Range(-1f, 1f) * transform.lossyScale.z;
-
-            //transform to posWS in C#
-            pos += transform.position;
-
-            positions.Add(new Vector3(pos.x, pos.y, pos.z));
+            for(int j = 0; j < cellCountZ; j++)
+            {
+                Vector3 center = new Vector3(i * cellSize, 0, j * cellSize) + transform.position - centerOffset;
+                int count = cellGrassCount;
+                while(count > 0)
+                {
+                    Vector3 pos = center;
+                    pos.x += UnityEngine.Random.Range(-1f, 1f) * cellSize * 0.5f;
+                    pos.z += UnityEngine.Random.Range(-1f, 1f) * cellSize * 0.5f;
+                    InstancedIndirectGrassRenderer.instance.allGrassPos[index] = pos;
+                    count--;
+                    index++;
+                }
+            }
         }
-
-        //send all posWS to renderer
-        InstancedIndirectGrassRenderer.instance.allGrassPos = positions;
-        cacheCount = positions.Count;
     }
 
 }
